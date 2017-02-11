@@ -14,7 +14,7 @@ namespace shortcut.util
     public class ShortcutUtil
     {
         // ReSharper disable once InconsistentNaming
-        private const string MISSING_PARAMETERS = @"Parameter sind fehlen! Es muss wenigstens der Pfad des Links (Ausgabe) und das Ziel angegeben werden.
+        private const string MISSING_PARAMETERS = @"Parameter fehlen! Es muss wenigstens der Pfad des Links (Ausgabe) und das Ziel angegeben werden.
 
 Verwenden Sie dazu
  
