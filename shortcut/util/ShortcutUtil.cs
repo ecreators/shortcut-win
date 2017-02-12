@@ -14,18 +14,8 @@ namespace shortcut.util
     public class ShortcutUtil
     {
         // ReSharper disable once InconsistentNaming
-        private const string MISSING_PARAMETERS = @"Parameter fehlen! Es muss wenigstens der Pfad des Links (Ausgabe) und das Ziel angegeben werden.
-
-Verwenden Sie dazu
- 
--d ""{Name auf dem Desktop}""
- 
-oder
- 
--n ""{Absoluter Pfad zum Link mit Verknuepfungsbezeichnung (ohne .lnk}"" -> Schreibrechte sind dort erforderlich!
-
-und
-
+        private const string MISSING_PARAMETERS = @"Parameter fehlen! Es muss wenigstens der Pfad des Links angegeben werden.
+        
 -l ""{Absoluter Pfad zum Programm}"" -> Wenn das Programm per Umgebungsvariablen hinterlegt ist kann auch dies verwendet werden.";
 
         // ReSharper disable once EmptyConstructor
@@ -48,6 +38,7 @@ und
 
         private void run(string[] arguments)
         {
+            // Lädt die eingebettete Ressource nach, ohne die das erstellen unter Windows nicht möglich wäre
             AppDomain.CurrentDomain.AssemblyResolve += (sender, args) => {
                 var resourceName = new AssemblyName(args.Name).Name + ".dll";
                 var resource = Array.Find(GetType().Assembly.GetManifestResourceNames(), element => element.EndsWith(resourceName));
@@ -65,6 +56,9 @@ und
             Console.InputEncoding = Encoding.UTF8;
             Console.WriteLine("Parameter: " + string.Join(",", arguments));
 
+            // P -help, /help, --help, -?, /?, --? oder gar keine Parameter
+            // zeigt die Anleitung (Hilfe)
+            
             var help = isParameterSet(arguments, "?", false);
             if (!help.IsSet) {
                 help = isParameterSet(arguments, "help", false);
@@ -92,7 +86,7 @@ und
             if (!style.IsSet) {
                 style = isParameterSet(arguments, "style", true, @"\d+");
             }
-            var styleInt = int.TryParse(style.Value, out int i) ? i : -1;
+            var styleInt = int.TryParse(style.Value, out int i) ? i : 0;
 
             var link = isParameterSet(arguments, "l", true, @"\.*");
             if (!link.IsSet) {
@@ -119,10 +113,10 @@ und
             var shortcut = new ShortcutArgs
             {
                 Arguments = param.Value,
-                Description = desc.Value ?? "",
-                IconImageFilePath = icon.Value ?? "",
-                WindowStyleConstant = Math.Max(0, styleInt),
-                WorkingDirectory = workingDir.Value ?? "",
+                Description = desc.Value ?? string.Empty,
+                IconImageFilePath = icon.Value ?? string.Empty,
+                WindowStyleConstant = styleInt,
+                WorkingDirectory = workingDir.Value ?? string.Empty,
                 TargetFileAssosiation = link.Value ?? string.Empty
             };
 
@@ -140,11 +134,13 @@ und
             }
         }
 
+        // absolutes Minimum an Parametern
         protected static bool canShortcut(ShortcutArgs shortcut)
         {
             return !isNullOrWhitespace(shortcut.TargetFileAssosiation);
         }
 
+        // So wird System.CSharp nicht nötig als dll und damit net 3.5 tauglich
         protected static bool isNullOrWhitespace(string text)
         {
             return (text == null || text.Trim().Length == 0);
@@ -152,10 +148,13 @@ und
 
         private void createShortcut(ShortcutArgs e)
         {
+            // ohne wdir, wird das aktuelle Arbeitsverzeichnis benutzt
             if (isNullOrWhitespace(e.WorkingDirectory))
             {
                 e.WorkingDirectory = Environment.CurrentDirectory + "\\";
             }
+            
+            // ohne -n "{abs. Pfad + Name}" oder -d "{Name auf Desktop}", wird die Verknüpfung beim Ziel abgelegt mit dem Namen des Ziels + .lnk
             if (isNullOrWhitespace(e.LinkPath))
             {
                 e.LinkPath = Path.Combine(e.WorkingDirectory, Path.GetFileNameWithoutExtension("" + e.TargetFileAssosiation));
@@ -185,6 +184,8 @@ und
 
             Console.WriteLine($"{{\r\n\t-n: \"{e.LinkPath}\",\r\n\t-w: \"{e.WorkingDirectory}\",\r\n\t-l: \"{e.TargetFileAssosiation}\",\r\n\t-param: \"{e.Arguments}\",\r\n\t-i: \"{e.IconImageFilePath}\",\r\n\t-desc: \"{e.Description}\"\r\n}}");
             onSaveShortcut(ref shortcut);
+            
+            // anlegen der lnk
             shortcut.Save();
         }
 
@@ -199,6 +200,7 @@ und
         {
         }
 
+        // Bestimmt Parameter und ggf. Wert
         public static Tuple<bool, string> isParameterSet(string[] args, string parameter, bool requiresValue, string regexValue = null)
         {
             for (var i = 0; i < args.Length; i++)
@@ -247,41 +249,27 @@ Allgemeine Anmerkung
 1. Alle Parameter (nicht Werte) dürfen mit - -- oder / beginnen.
 2. Die Gross- und Kleinschreibung wird bei den Parametern ignoriert
 3. Die mit Parametern angegebenen Werte beduerfen keiner Reihenfolge
+
+Achtung: Das Definieren eines Shortcut-Keys wird nicht unterstuetzt! 
  
 +----------------------+
-| Parameter ""d""      |
+| Parameter            |
 +----------------------+
  
-Achtung: Das Definieren eines Shortcut-Keys wird nicht unterstuetzt!
- 
-^(--|-|/)(d|D|desktop)\s'.*'$ - Erstellt eine benannte Verknuepfung auf dem Desktop.
-Beispiel:
--d 'meine Verknuepfung' => Erstellt die Verknuepfung 'meine Verknuepfung.lnk' auf dem Desktop
- 
-Ohne den Parameter muss die Verknuepfung absolut sein (aber ohne "".lnk""!)
- 
-+----------------------+
-| Parameter ""s""      |
-+----------------------+
- 
-^(--|-|/)(s|S|style)\s\d$ - Verwendet einen bestimmten Windowsstil
-Beispiel:
--s (\d+) => Verwendet den Fensterstil mit der entsprechenden Enumerationsziffer
-0 = Normal starten
-1 = Minimiert starten
-4 = Maximiert starten
- 
-+----------------------+
-| Wichtigste Parameter |
-+----------------------+
- 
-Alle Angaben müssen in einfachen Anfuehrungszeichen stehen!
- 
-1. [Name]       - Link-Name: Name der Verkuepfung mit Zusammenhang mit ""d"" oder ein absoluter Pfad zum Link inklusive Name, aber ohne lnk
+Alle Angaben müssen in einfachen oder normalen Anfuehrungszeichen stehen!
+
+1.a [Desktop]   - Link-Name auf Desktop: Name der Verkuepfung, aber ohne lnk
+                  Parameter: ""d"" oder ""D"" oder ""desktop""
+                  Beispiel -d 'Verknuepfung'
+                  
+                  ODER
+                  
+1.b [Name]      - Link-Name: Absoluter Pfad zum Link inklusive Name, aber ohne lnk. Am Zielordner sind Schreibrechte nötig!                  
+                  Der Ordner, muss bereits existieren!
                   Parameter: ""n"" oder ""N"" oder ""name""
-                  Beispiel -d -n 'Verknuepfung' oder -n 'c:\\Verknuepfung'
+                  Beispiel -n 'c:\\Verknuepfung'
  
-2. [Link]       - Link-Angabe: Absoluter Pfad oder mit dem Parameter ""d"" nur den Namen
+2. [Link]       - Link-Angabe: Absoluter Pfad zur Zieldatei
                   Parameter: ""l"" oder ""L"" oder ""link""
                   Beispiel -l 'c:\\file.exe'
  
@@ -289,7 +277,7 @@ Alle Angaben müssen in einfachen Anfuehrungszeichen stehen!
                   Parameter: ""p"" oder ""P"" oder ""param""
                   Beispiel -p '-debug ""x""'
  
-4. [Icon]       - Icon-Angabe: Absoluter Pfad zu einer Bilddatei (png,bmp,ico) oder einem eingebetteten Icon per z.B. 'notepad.exe, 0'
+4. [Icon]       - Icon-Angabe: Absoluter Pfad zu einer Bilddatei (ico) oder einem eingebetteten Icon per z.B. 'notepad.exe, 0'
                                Der Pfad kann auch relative zum Arbeitsverzeichnis sein.
                   Parameter: ""i"" oder ""I"" oder ""icon""
                   Beispiel -i 'c:\\file.exe, 0'
@@ -298,9 +286,25 @@ Alle Angaben müssen in einfachen Anfuehrungszeichen stehen!
                   Parameter: ""w"" oder ""W"" oder ""wdir""
                   Beispiel -w 'c:\\'
  
-6. [Desc]       - Link Beschreibung: Ein freier Text
+6. [Desc]       - Link Beschreibung: Ein freier Text. Einzeilig!
                   Parameter: ""desc""
                   Beispiel -desc 'Meine Verknuepfung ist das!'
+                  
+7. [Style]      - Fensterstil: 0, 1, 4 ohne Anführungszeichen.
+                  0 = Normales Fenster
+                  1 = Minimiert
+                  4 = Maximiert
+                  Parameter: ""s"" oder ""S"" oder ""style""
+                  Beispiel -s 0
+                  
+                  
+Ein Link kann bei der Zieldatei erzeugt werden mit nzr dem Parameter -l.
+
+In diesem Fall ist
+-wdir das aktuelle Verzeichnis zum Ziel
+-icon wird versucht auf ""Ziel,0""
+-name wird das -wdir + Dateiname von -l + .lnk
+-style wird 0
 ";
         }
     }
